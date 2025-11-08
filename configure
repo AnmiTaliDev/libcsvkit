@@ -28,8 +28,10 @@ PREFIX="/usr/local"
 LIBDIR=""
 INCLUDEDIR=""
 CC="gcc"
+CXX="g++"
 AR="ar"
 CFLAGS="-Wall -Wextra -Wpedantic -std=c99 -fPIC"
+CXXFLAGS="-Wall -Wextra -Wpedantic -std=c++11 -fPIC"
 LDFLAGS="-shared"
 BUILD_TYPE="Release"
 ENABLE_DEBUG="OFF"
@@ -37,11 +39,13 @@ ENABLE_VERBOSE="OFF"
 ENABLE_STATIC="ON"
 ENABLE_SHARED="ON"
 ENABLE_EXAMPLES="ON"
+ENABLE_CPP="OFF"
 SRC_DIR="src"
 INC_DIR="include"
 BUILD_DIR="build"
 LIB_DIR="lib"
 EXAMPLE_DIR="examples"
+CPP_DIR="extras/cpp"
 
 # Version
 VERSION_MAJOR=0
@@ -52,6 +56,8 @@ VERSION="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
 # Detection results
 CC_VERSION=""
 CC_PATH=""
+CXX_VERSION=""
+CXX_PATH=""
 AR_PATH=""
 PLATFORM=""
 ARCH=""
@@ -109,10 +115,12 @@ ${BOLD}OPTIONS:${RESET}
     --libdir=DIR             Library installation directory (default: PREFIX/lib)
     --includedir=DIR         Header installation directory (default: PREFIX/include)
     --cc=PATH                Path to C compiler (default: gcc)
+    --cxx=PATH               Path to C++ compiler (default: g++)
     --ar=PATH                Path to archiver (default: ar)
     --build-type=TYPE        Build type: Release, Debug (default: Release)
     --enable-debug           Enable debug symbols in Release build
     --enable-verbose         Enable verbose compilation output
+    --enable-cpp             Enable C++ bindings
     --disable-static         Disable building static library
     --disable-shared         Disable building shared library
     --disable-examples       Disable building examples
@@ -156,6 +164,9 @@ parse_arguments() {
             --cc=*)
                 CC="${arg#*=}"
                 ;;
+            --cxx=*)
+                CXX="${arg#*=}"
+                ;;
             --ar=*)
                 AR="${arg#*=}"
                 ;;
@@ -167,6 +178,9 @@ parse_arguments() {
                 ;;
             --enable-verbose)
                 ENABLE_VERBOSE="ON"
+                ;;
+            --enable-cpp)
+                ENABLE_CPP="ON"
                 ;;
             --disable-static)
                 ENABLE_STATIC="OFF"
@@ -246,6 +260,40 @@ detect_compiler() {
     echo
 }
 
+# C++ Compiler Detection
+
+detect_cxx_compiler() {
+    if [ "$ENABLE_CPP" = "OFF" ]; then
+        return
+    fi
+
+    print_section "Checking for C++ Compiler"
+
+    if ! command -v "$CXX" &> /dev/null; then
+        print_status "ERROR" "C++ compiler not found: $CXX"
+        print_error "Please install g++/clang++ or specify path with --cxx=PATH"
+    fi
+
+    CXX_PATH="$(command -v "$CXX")"
+    print_status "OK" "Found CXX: ${CXX_PATH}"
+
+    CXX_VERSION=$($CXX --version 2>/dev/null | head -n1 || echo "unknown")
+    print_status "OK" "Version: ${CXX_VERSION}"
+
+    # Test C++ compilation
+    echo "int main() { return 0; }" > /tmp/test_$$.cpp
+    if $CXX /tmp/test_$$.cpp -o /tmp/test_$$ 2>/dev/null; then
+        print_status "OK" "C++ compiler test passed"
+        rm -f /tmp/test_$$.cpp /tmp/test_$$
+    else
+        rm -f /tmp/test_$$.cpp /tmp/test_$$
+        print_status "ERROR" "C++ compiler test failed"
+        print_error "C++ compiler cannot create executables"
+    fi
+
+    echo
+}
+
 # Archiver Detection
 
 detect_archiver() {
@@ -292,26 +340,31 @@ configure_build_flags() {
     print_section "Configuring Build Flags"
 
     local base_cflags="-Wall -Wextra -Wpedantic -std=c99 -I${INC_DIR} -fPIC"
+    local base_cxxflags="-Wall -Wextra -Wpedantic -std=c++11 -I${INC_DIR} -fPIC"
 
     case "$BUILD_TYPE" in
         Release)
             CFLAGS="$base_cflags -O2"
+            CXXFLAGS="$base_cxxflags -O2"
             print_status "OK" "Build type: Release (optimized)"
             ;;
         Debug)
             CFLAGS="$base_cflags -g -O0"
+            CXXFLAGS="$base_cxxflags -g -O0"
             ENABLE_DEBUG="ON"
             print_status "OK" "Build type: Debug (with symbols)"
             ;;
         *)
             print_status "WARN" "Unknown build type: $BUILD_TYPE, using Release"
             CFLAGS="$base_cflags -O2"
+            CXXFLAGS="$base_cxxflags -O2"
             BUILD_TYPE="Release"
             ;;
     esac
 
     if [ "$ENABLE_DEBUG" = "ON" ] && [ "$BUILD_TYPE" = "Release" ]; then
         CFLAGS="$CFLAGS -g"
+        CXXFLAGS="$CXXFLAGS -g"
         print_status "OK" "Debug symbols: enabled"
     fi
 
@@ -320,6 +373,9 @@ configure_build_flags() {
     fi
 
     print_status "INFO" "CFLAGS: ${CFLAGS}"
+    if [ "$ENABLE_CPP" = "ON" ]; then
+        print_status "INFO" "CXXFLAGS: ${CXXFLAGS}"
+    fi
     print_status "INFO" "LDFLAGS: ${LDFLAGS}"
     echo
 }
@@ -356,8 +412,10 @@ generate_makefile() {
 
 # Configuration
 CC = $CC
+CXX = $CXX
 AR = $AR
 CFLAGS = $CFLAGS
+CXXFLAGS = $CXXFLAGS
 LDFLAGS = $LDFLAGS
 PREFIX = $PREFIX
 LIBDIR = $LIBDIR
@@ -380,6 +438,7 @@ INC_DIR = $INC_DIR
 BUILD_DIR = $BUILD_DIR
 LIB_DIR = $LIB_DIR
 EXAMPLE_DIR = $EXAMPLE_DIR
+CPP_DIR = $CPP_DIR
 
 # Source files
 SOURCES = \$(wildcard \$(SRC_DIR)/*.c)
@@ -389,6 +448,12 @@ OBJECTS = \$(SOURCES:\$(SRC_DIR)/%.c=\$(BUILD_DIR)/%.o)
 LIB_STATIC = \$(LIB_DIR)/libcsvkit.a
 LIB_SHARED = \$(LIB_DIR)/libcsvkit.so
 LIB_SHARED_VERSIONED = \$(LIB_DIR)/libcsvkit.so.\$(VERSION)
+
+# C++ bindings
+CPP_SOURCES = \$(wildcard \$(CPP_DIR)/*.cpp)
+CPP_OBJECTS = \$(CPP_SOURCES:\$(CPP_DIR)/%.cpp=\$(BUILD_DIR)/cpp_%.o)
+CPP_LIB_SHARED = \$(LIB_DIR)/libcsvkit++.so
+CPP_LIB_SHARED_VERSIONED = \$(LIB_DIR)/libcsvkit++.so.\$(VERSION)
 
 # Examples
 EXAMPLE_SOURCES = \$(wildcard \$(EXAMPLE_DIR)/*.c)
@@ -441,6 +506,27 @@ $(LIB_SHARED): $(OBJECTS) | $(LIB_DIR)
 	@$(CC) $(LDFLAGS) -Wl,-soname,libcsvkit.so.$(VERSION_MAJOR) -o $(LIB_SHARED_VERSIONED) $^
 	@ln -sf libcsvkit.so.$(VERSION) $(LIB_SHARED)
 	@ln -sf libcsvkit.so.$(VERSION) $(LIB_DIR)/libcsvkit.so.$(VERSION_MAJOR)
+
+EOF
+    fi
+
+    if [ "$ENABLE_CPP" = "ON" ]; then
+        cat >> Makefile << 'EOF'
+# Compile C++ source files
+$(BUILD_DIR)/cpp_%.o: $(CPP_DIR)/%.cpp | $(BUILD_DIR)
+	@echo "\033[1m-- Compiling C++\033[0m $<"
+	@$(CXX) $(CXXFLAGS) -c $< -o $@
+
+# Build C++ shared library
+.PHONY: cpp
+cpp: $(CPP_LIB_SHARED)
+
+$(CPP_LIB_SHARED): $(CPP_OBJECTS) $(LIB_SHARED) | $(LIB_DIR)
+	@echo ""
+	@echo "\033[1m-- Creating C++ shared library\033[0m"
+	@$(CXX) $(LDFLAGS) -Wl,-soname,libcsvkit++.so.$(VERSION_MAJOR) -o $(CPP_LIB_SHARED_VERSIONED) $^ -L$(LIB_DIR) -lcsvkit
+	@ln -sf libcsvkit++.so.$(VERSION) $(CPP_LIB_SHARED)
+	@ln -sf libcsvkit++.so.$(VERSION) $(LIB_DIR)/libcsvkit++.so.$(VERSION_MAJOR)
 
 EOF
     fi
@@ -503,6 +589,48 @@ install: all
 	fi
 	@echo ""
 
+EOF
+
+    if [ "$ENABLE_CPP" = "ON" ]; then
+        cat >> Makefile << 'EOF'
+# Install C++ bindings
+.PHONY: install-cpp
+install-cpp: cpp
+	@echo ""
+	@echo "\033[1;36mInstalling C++ bindings\033[0m"
+	@echo ""
+	@if [ ! -w "$(LIBDIR)" ] && [ ! -d "$(LIBDIR)" ]; then \
+		echo "   \033[1;33m[WARN]\033[0m Requires root privileges"; \
+		echo ""; \
+		if [ -f "$(CPP_LIB_SHARED_VERSIONED)" ]; then \
+			sudo install -m 755 "$(CPP_LIB_SHARED_VERSIONED)" "$(LIBDIR)/"; \
+			sudo ln -sf libcsvkit++.so.$(VERSION) "$(LIBDIR)/libcsvkit++.so.$(VERSION_MAJOR)"; \
+			sudo ln -sf libcsvkit++.so.$(VERSION) "$(LIBDIR)/libcsvkit++.so"; \
+		fi; \
+		sudo install -m 644 "$(CPP_DIR)/csvkit.hpp" "$(INCLUDEDIR)/"; \
+		sudo ldconfig 2>/dev/null || true; \
+	else \
+		if [ -f "$(CPP_LIB_SHARED_VERSIONED)" ]; then \
+			install -m 755 "$(CPP_LIB_SHARED_VERSIONED)" "$(LIBDIR)/"; \
+			ln -sf libcsvkit++.so.$(VERSION) "$(LIBDIR)/libcsvkit++.so.$(VERSION_MAJOR)"; \
+			ln -sf libcsvkit++.so.$(VERSION) "$(LIBDIR)/libcsvkit++.so"; \
+		fi; \
+		install -m 644 "$(CPP_DIR)/csvkit.hpp" "$(INCLUDEDIR)/"; \
+		ldconfig 2>/dev/null || true; \
+	fi
+	@echo ""
+	@echo "\033[1;32mC++ bindings installed!\033[0m"
+	@echo ""
+	@echo "   \033[1mC++ Header:\033[0m   \033[0;36m$(INCLUDEDIR)/csvkit.hpp\033[0m"
+	@if [ -f "$(LIBDIR)/libcsvkit++.so.$(VERSION)" ]; then \
+		echo "   \033[1mC++ Library:\033[0m  \033[0;36m$(LIBDIR)/libcsvkit++.so.$(VERSION)\033[0m"; \
+	fi
+	@echo ""
+
+EOF
+    fi
+
+    cat >> Makefile << 'EOF'
 # Uninstall
 .PHONY: uninstall
 uninstall:
@@ -529,6 +657,38 @@ uninstall:
 	fi
 	@echo ""
 
+EOF
+
+    if [ "$ENABLE_CPP" = "ON" ]; then
+        cat >> Makefile << 'EOF'
+# Uninstall C++ bindings
+.PHONY: uninstall-cpp
+uninstall-cpp:
+	@echo ""
+	@echo "\033[1;36mUninstalling C++ bindings\033[0m"
+	@echo ""
+	@if [ -f "$(LIBDIR)/libcsvkit++.so.$(VERSION)" ] || [ -f "$(INCLUDEDIR)/csvkit.hpp" ]; then \
+		if [ ! -w "$(LIBDIR)" ]; then \
+			echo "   \033[1;33m[WARN]\033[0m Requires root privileges"; \
+			echo ""; \
+			sudo rm -f "$(LIBDIR)/libcsvkit++.so"*; \
+			sudo rm -f "$(INCLUDEDIR)/csvkit.hpp"; \
+			sudo ldconfig 2>/dev/null || true; \
+		else \
+			rm -f "$(LIBDIR)/libcsvkit++.so"*; \
+			rm -f "$(INCLUDEDIR)/csvkit.hpp"; \
+			ldconfig 2>/dev/null || true; \
+		fi; \
+		echo "\033[1;32mC++ bindings uninstalled!\033[0m"; \
+	else \
+		echo "\033[1;33m[WARN]\033[0m C++ bindings not found"; \
+	fi
+	@echo ""
+
+EOF
+    fi
+
+    cat >> Makefile << 'EOF'
 # Clean
 .PHONY: clean
 clean:
@@ -618,8 +778,15 @@ print_summary() {
     echo -e "${BOLD}Compiler:${RESET}"
     print_config "CC Path" "$CC_PATH"
     print_config "CC Version" "$CC_VERSION"
+    if [ "$ENABLE_CPP" = "ON" ]; then
+        print_config "CXX Path" "$CXX_PATH"
+        print_config "CXX Version" "$CXX_VERSION"
+    fi
     print_config "AR Path" "$AR_PATH"
     print_config "CFLAGS" "$CFLAGS"
+    if [ "$ENABLE_CPP" = "ON" ]; then
+        print_config "CXXFLAGS" "$CXXFLAGS"
+    fi
     print_config "LDFLAGS" "$LDFLAGS"
 
     echo
@@ -630,6 +797,7 @@ print_summary() {
     print_config "Verbose Output" "$ENABLE_VERBOSE"
     print_config "Static Library" "$ENABLE_STATIC"
     print_config "Shared Library" "$ENABLE_SHARED"
+    print_config "C++ Bindings" "$ENABLE_CPP"
     print_config "Examples" "$ENABLE_EXAMPLES"
 
     echo
@@ -646,9 +814,17 @@ print_summary() {
     echo
     echo -e "${BOLD}Next steps:${RESET}"
     echo -e "   ${CYAN}1.${RESET} Run ${BOLD_CYAN}make${RESET} to build the library"
-    echo -e "   ${CYAN}2.${RESET} Run ${BOLD_CYAN}make examples${RESET} to build examples"
-    echo -e "   ${CYAN}3.${RESET} Run ${BOLD_CYAN}make install${RESET} to install (may need sudo)"
-    echo -e "   ${CYAN}4.${RESET} Run ${BOLD_CYAN}make help${RESET} to see all available targets"
+    if [ "$ENABLE_CPP" = "ON" ]; then
+        echo -e "   ${CYAN}2.${RESET} Run ${BOLD_CYAN}make cpp${RESET} to build C++ bindings"
+        echo -e "   ${CYAN}3.${RESET} Run ${BOLD_CYAN}make examples${RESET} to build examples"
+        echo -e "   ${CYAN}4.${RESET} Run ${BOLD_CYAN}make install${RESET} to install (may need sudo)"
+        echo -e "   ${CYAN}5.${RESET} Run ${BOLD_CYAN}make install-cpp${RESET} to install C++ bindings"
+        echo -e "   ${CYAN}6.${RESET} Run ${BOLD_CYAN}make help${RESET} to see all available targets"
+    else
+        echo -e "   ${CYAN}2.${RESET} Run ${BOLD_CYAN}make examples${RESET} to build examples"
+        echo -e "   ${CYAN}3.${RESET} Run ${BOLD_CYAN}make install${RESET} to install (may need sudo)"
+        echo -e "   ${CYAN}4.${RESET} Run ${BOLD_CYAN}make help${RESET} to see all available targets"
+    fi
     echo
 }
 
@@ -660,6 +836,7 @@ main() {
     parse_arguments "$@"
     detect_system
     detect_compiler
+    detect_cxx_compiler
     detect_archiver
     check_sources
     configure_build_flags

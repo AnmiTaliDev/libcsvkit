@@ -140,6 +140,9 @@ void csvkit_writer_close(csvkit_writer_t *writer);
 /* Free the writer */
 void csvkit_writer_free(csvkit_writer_t *writer);
 
+/* Get the last error message */
+const char *csvkit_writer_get_error_msg(csvkit_writer_t *writer);
+
 #ifdef __cplusplus
 }
 #endif

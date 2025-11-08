@@ -192,3 +192,8 @@ void csvkit_writer_free(csvkit_writer_t *writer) {
     free(writer->error_msg);
     free(writer);
 }
+
+const char *csvkit_writer_get_error_msg(csvkit_writer_t *writer) {
+    if (!writer) return NULL;
+    return writer->error_msg;
+}

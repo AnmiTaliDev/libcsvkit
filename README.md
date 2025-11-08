@@ -41,6 +41,7 @@ libcsvkit follows the classic Unix philosophy with modern convenience:
 - C99-compliant compiler (gcc, clang, etc.)
 - make
 - Standard C library (POSIX)
+- **Optional:** C++11-compliant compiler for C++ bindings (g++, clang++)
 
 ### Quick Start
 
@@ -51,14 +52,23 @@ libcsvkit follows the classic Unix philosophy with modern convenience:
 # Or customize installation
 ./configure --prefix=/usr --build-type=Release
 
+# Enable C++ bindings
+./configure --enable-cpp
+
 # Build the library
 make
+
+# Build C++ bindings (if enabled)
+make cpp
 
 # Build examples
 make examples
 
 # Install (may require sudo)
 make install
+
+# Install C++ bindings (if enabled)
+make install-cpp
 ```
 
 ### Configuration Options
@@ -72,10 +82,81 @@ Available options:
 - `--libdir=DIR` - Library directory (default: PREFIX/lib)
 - `--includedir=DIR` - Header directory (default: PREFIX/include)
 - `--cc=PATH` - C compiler path
+- `--cxx=PATH` - C++ compiler path
 - `--build-type=TYPE` - Release or Debug
 - `--enable-debug` - Enable debug symbols
+- `--enable-cpp` - Enable C++ bindings
 - `--disable-static` - Don't build static library
 - `--disable-shared` - Don't build shared library
+
+## C++ Bindings
+
+libcsvkit provides modern C++ bindings with RAII, exceptions, and STL integration.
+
+### Features
+
+- RAII-based resource management
+- Exception-based error handling
+- STL integration (std::vector, std::string)
+- Range-based loop support
+- Move semantics
+- Fluent configuration API
+
+### Building C++ Bindings
+
+```bash
+./configure --enable-cpp
+make
+make cpp
+sudo make install
+sudo make install-cpp
+```
+
+### C++ Usage Example
+
+```cpp
+#include <csvkit.hpp>
+#include <iostream>
+
+using namespace csvkit;
+
+int main() {
+    try {
+        // Read CSV file
+        Parser parser;
+        parser.open("data.csv");
+
+        // Range-based loop
+        for (auto& row : parser) {
+            for (const auto& field : row) {
+                std::cout << field << " ";
+            }
+            std::cout << std::endl;
+        }
+
+        // Write CSV file
+        Writer writer;
+        writer.open("output.csv");
+        writer.write_row({"Name", "Age", "City"});
+        writer.write_row({"John", "30", "NYC"});
+        writer.close();
+
+    } catch (const Exception& e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
+
+    return 0;
+}
+```
+
+### Compiling with C++ Bindings
+
+```bash
+g++ -std=c++11 myapp.cpp -o myapp -lcsvkit++
+```
+
+For detailed C++ API documentation, see [extras/cpp/README.md](extras/cpp/README.md).
 
 ## License
 
